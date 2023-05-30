@@ -56,12 +56,12 @@ def find_DHres_kDH(kfexp, kuexp, nres, temp=298, k0=1e7, DSres=16.5e-3) -> typin
         ku = k0 * np.exp(-DGts_n/(R * temp))
 
         # compute stability penalty
-        p = DGts_u - DGts_n - (R * temp * np.log(kfexp/kuexp))
+        p = np.log((DGts_n - DGts_u)/(-R * temp * np.log(kuexp / kfexp))) ** 2
 
         # solve objective function
-        return (np.log(kf/kfexp)**2) + (np.log(ku/kuexp)**2) + p
+        return (np.log(kf / kfexp) ** 2) + (np.log(ku / kuexp) ** 2) + p
 
     # solve for DHres and kDH
     DHres, kDH = least_squares(
-        fun=_, x0=(5, 3), bounds=((0, np.inf), (0, np.inf))).x
+        fun=_, x0=(5.5, 3), bounds=(0, np.inf)).x
     return DHres, kDH

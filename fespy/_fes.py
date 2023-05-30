@@ -1,37 +1,16 @@
 """
 _fes.py
 
-TODO: make FES oop object; requires:
-    - all_atom: atom-level sub-object which includes the following
-        1. van der Waal atom pairings
-        2. Hydrogen Bonding Pairings
-        3. Electrostatic Pairings (based on pH)
-        4. Bonded Pairings
-        ** All pairings within same residue are not included
-        Included: all r_min values for all atomic pairings.
-    - alpha_carbon: alpha-carbon level description which includes
-        1. ca_ca pairings
-        2. DSSP pairings
-        ** All pairings intended to include DSSP pairings
-    # - General Thermodynamics
-    #     1. Enthalpy: DHres, DH(n), and kappaDH
-    #     2. Entropy: DSres, DS(n)
-    #     3. Free Energy: DG(n), temp
-    # - General Kinetics
-    #     1. Folding Kinetics (kf, ku) and (pf, pu)
-    #     2. Stability
-    #     3. PreExponential (k0)
-    - Structural Parameters
-        1. Topology: CO, ACO
-        2. Global Charge given pH
-        3. DSSP
-        4. Sequence Length
 """
 import mdtraj
+import typing
 import numpy as np
 from scipy.constants import gas_constant
 from ._thermo import *
 from ._solver import *
+from ._all_atom import *
+from ._calpha import *
+from ._prep import prep_structure
 
 __all__ = ['FES']
 
@@ -50,24 +29,25 @@ class FES:
     Attributes
     ----------
     """
-    def __init__(self, kfexp, kuexp, pdb, pH=7.4, temp=298, k0=1e7, lnat=101) -> None:
+
+    def __init__(self, kfexp, kuexp, pdb, pH=7.4, temp=298, k0=1e7, lnat=101):
         """
         Parses structure and sequence data from the Protein Data Bank
         file passed along with the experimental folding kinetics
         obtained from research.
         """
-        self.t: mdtraj.Trajectory = mdtraj.load_pdb(pdb, frame=0)
-        self.n_residues = self.t.n_residues
-        self.n_atoms = self.t.n_atoms
+        self.traj: mdtraj.Trajectory = prep_structure(pdb_file=pdb, pH=pH)
+        self.n_residues = self.traj.n_residues
+        self.n_atoms = self.traj.n_atoms
+        self.pH = pH
+        self.temp = temp
+        self.id = pdb.replace("/", "_").split("_")[-2]
 
         # General Kinetics
         self.kf = kfexp
         self.ku = kuexp
         self.k0 = k0
-        self.pH = pH
-        self.temp = temp
-        self.stab = -R * self.temp * np.log(self.ku/self.kf)
-        self.pf = 1/(1 + (self.ku/self.kf))
+        self.pf = 1 / (1 + (self.ku / self.kf))
         self.pu = 1 - self.pf
 
         # General Thermodynamics
@@ -78,4 +58,43 @@ class FES:
         self.DH = gen_enthalpy(
             self.nat, self.n_residues, self.DHres, self.kDH)
         self.DG = self.DH - (self.temp * self.DS)
+        self.stab = -R * self.temp * np.log(self.ku / self.kf)
 
+        # All atom description
+        self.atom = AllAtom(traj=self.traj, pH=self.pH, temp=self.temp)
+
+        # Alpha Carbon description
+        self.c_alpha = CAlpha(traj=self.traj)
+        (self.co,
+         self.aco,
+         self.tcd,
+         self.lro) = self._get_topology()
+
+    def _get_topology(self) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Returns the topology parameters derived by previous research from following
+        groups: Baker Lab (CO, ACO), Gromiha Lab (LRO), Zhou Lab (TCD). Each follow
+        the criterion of the original papers (ACO, CO, TCD: 2 residues away and
+        within 6 Angstroms distance; LRO: 12 residues away and 8 angstroms away).
+
+        Returns
+        -------
+        rtype: typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+            Contact order (CO), absolute contact order (ACO), total contact distance
+            (TCD), and long range order (LRO) of the protein.
+        """
+        # get the non-bonded distances and conditions
+        distances = np.hstack((self.atom.vdw_dist, self.atom.hbond_dist))
+        seqdist = np.hstack((self.atom.vdw_seqdist, self.atom.hbond_seqdist))
+        cond = (distances <= 0.6) & (seqdist > 2)
+
+        # compute CO, ACO, and TCD
+        co = seqdist[cond].sum() / (self.n_residues * seqdist[cond].size)
+        aco = self.n_residues * co
+        tcd = seqdist[cond].sum() / (self.n_residues ** 2)
+
+        # condition for LRO
+        cond = (self.c_alpha.distances <= 0.8) & (self.c_alpha.seqdist > 12)
+        lro = self.c_alpha.seqdist[cond].size / self.n_residues
+
+        return co, aco, tcd, lro

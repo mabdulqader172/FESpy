@@ -56,9 +56,7 @@ def gen_entropy(nat, nres, DSres=16.5e-3) -> np.ndarray:
         nativeness.
     """
     DS_mix = -R * nres * np.nan_to_num(
-        (nat * np.log(nat)) + ((1 - nat) * np.log(1 - nat)),
-        nan=0
-    )
+        (nat * np.log(nat)) + ((1 - nat) * np.log(1 - nat)))
     DS_dif = nres * DSres * (1 - nat)
 
     return DS_dif + DS_mix
