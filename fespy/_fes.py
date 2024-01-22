@@ -70,7 +70,8 @@ class FES:
          self.tcd,
          self.lro) = self._get_topology()
 
-    def _get_topology(self) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _get_topology(self) -> typing.Tuple[
+            np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Returns the topology parameters derived by previous research from following
         groups: Baker Lab (CO, ACO), Gromiha Lab (LRO), Zhou Lab (TCD). Each follow
@@ -86,7 +87,7 @@ class FES:
         # get the non-bonded distances and conditions
         distances = np.hstack((self.atom.vdw_dist, self.atom.hbond_dist))
         seqdist = np.hstack((self.atom.vdw_seqdist, self.atom.hbond_seqdist))
-        cond = (distances <= 0.6) & (seqdist > 2)
+        cond = (distances < 0.6) & (seqdist >= 2)
 
         # compute CO, ACO, and TCD
         co = seqdist[cond].sum() / (self.n_residues * seqdist[cond].size)
@@ -94,7 +95,7 @@ class FES:
         tcd = seqdist[cond].sum() / (self.n_residues ** 2)
 
         # condition for LRO
-        cond = (self.c_alpha.distances <= 0.8) & (self.c_alpha.seqdist > 12)
+        cond = (self.c_alpha.distances < 0.8) & (self.c_alpha.seqdist >= 12)
         lro = self.c_alpha.seqdist[cond].size / self.n_residues
 
         return co, aco, tcd, lro

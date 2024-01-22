@@ -124,9 +124,10 @@ class AllAtom:
         # non_hydrogen_cond = (bond_data[:, -2] != 'H') & (bond_data[:, -1] != 'H')
 
         return bond_data[:, :2].astype(int), bond_data[:, 2:].astype(str)
-        # return bond_data[non_hydrogen_cond, :2].astype(int), bond_data[non_hydrogen_cond, 2:].astype(str)
 
-    def _hbonds(self, traj) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _hbonds(self, traj) -> typing.Tuple[
+            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+            np.ndarray, np.ndarray]:
         """
         Find all the hydrogen bonds in the protein along with the
         angle each bond is producing.
@@ -214,7 +215,9 @@ class AllAtom:
         # if all conditions met return true
         return True
 
-    def _van_der_waal(self, traj) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _van_der_waal(self, traj) -> typing.Tuple[
+            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+            np.ndarray]:
         """
         Determine all the atom pairings, atom types of each pairing,
         distance (in nanometer), and sigma (for lennard-jones
@@ -250,7 +253,8 @@ class AllAtom:
         return vdw, vdw_type, vdw_dist, vdw_rmin, vdw_seqdist
 
     def _electrostatic(self, traj) -> typing.Tuple[
-            np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+            np.ndarray, np.ndarray, np.ndarray]:
         """
         Determine the electrostatics of the protein. The atom pairing,
         atom pairing type, point charge, and distance between each pairing
