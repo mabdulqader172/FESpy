@@ -1,0 +1,6 @@
+mdtraj
+numpy
+openmm
+pdbfixer
+scipy
+setuptools
