@@ -282,8 +282,8 @@ class AllAtom:
 
         # selection algebra for finding the subset of atoms in the protein
         atom_idx = self.topology.select(
-            f'((resname {" ".join(charged_resid)}) and (name {" ".join(list(self.charge_dict.keys())[:-2])})) or \
-            (name N and resid 0) or (name OXT and resid {self.topology.n_residues - 1})'
+            f'((resname {" ".join(charged_resid)}) and (name {" ".join(list(self.charge_dict.keys())[:-2])})) \
+            or (name N and resid 0) or (name OXT and resid {self.topology.n_residues - 1})'
         )
         f = lambda i, j: (self.topology.atom(i).residue.index != self.topology.atom(j).residue.index) \
             and not (np.any((self.bond == (i, j)).all(axis=1)))
@@ -307,7 +307,8 @@ class AllAtom:
 
         # product charges
         coulomb_charge = np.array([
-            (self.charge_dict[self.topology.atom(i).name] * e) * (self.charge_dict[self.topology.atom(j).name] * e)
+            (self.charge_dict[self.topology.atom(i).name] * e) *
+            (self.charge_dict[self.topology.atom(j).name] * e)
             for i, j in coulomb
         ])
 
@@ -319,4 +320,8 @@ class AllAtom:
             ke * (q1q2 / d) for d, q1q2 in zip(coulomb_dist * 1e-9, coulomb_charge)
         ]) * 1e-3  # (J / mol) --> (kJ / mol)
 
-        return coulomb, coulomb_type, coulomb_potential, coulomb_charge, coulomb_dist, coulomb_rmin, coulomb_seqdist
+        return (
+            coulomb, coulomb_type, coulomb_potential,
+            coulomb_charge, coulomb_dist, coulomb_rmin,
+            coulomb_seqdist
+        )
