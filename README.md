@@ -4,7 +4,7 @@ the folding kinetics of a protein ($k_f$ the folding rate and $k_u$ the unfoldin
 file of the structure of the protein.
 
 ## Properties of the `FES` Object
-The python modules `openmm`, `mdtraj`, and `scipy` are key dependencies used in `FESpy` as they are key in computing the
+The python modules `openmm`, `mdtraj`, and `scipy` are key dependencies used in `FESpy` as they are needed for computing the
 following information:
 - **One Dimensional Free Energy Surface** based on the model proposed in the 
 [following publications](https://doi.org/10.1039/C1CP20402E). Where a function for $\Delta G$, $\Delta H$ and $\Delta S$
