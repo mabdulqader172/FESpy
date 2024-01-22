@@ -14,7 +14,7 @@ unfolded).
 structure. The computed parameters are [contact order (CO)](https://doi.org/10.1006/JMBI.1998.1645), 
 [absolute contact order (ACO)](https://doi.org/10.1110/PS.0302503), [total contact distance (TCD)](https://doi.org/10.1016/S0006-3495(02)75410-6),
 and [long-range order (LRO)](https://doi.org/10.1006/JMBI.2001.4775).
-- **Alpha Carbon Description** of the protein. This includes the physical C$_\alpha$-C$_\alpha$ distances along with the 
+- **Alpha Carbon Description** of the protein. This includes the physical $C_\alpha$-$C_\alpha$ distances along with the 
 distance of each alpha carbon pairing along the primary amino acid sequence.
 - **All Atom Description** of the protein. This includes the all heavy atom descriptors like atom pair distances, charges,
 the type of atom paring (van der Waals, hydrogen-bonding, electrostatic). All distances and pairing information are computed

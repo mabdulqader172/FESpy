@@ -1,3 +1,8 @@
+"""
+_thermo.py
+
+Submodule which contains the governing thermodynamic functions utilized by _solver submodule.
+"""
 import numpy as np
 from scipy.constants import gas_constant
 

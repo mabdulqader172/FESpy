@@ -1,6 +1,7 @@
 """
 _fes.py
 
+Main OOP definition of the FES object.
 """
 import mdtraj
 import typing

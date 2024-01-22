@@ -1,3 +1,8 @@
+"""
+_calpha.py
+
+Submodule that computes alpha carbon level information of the protein structure obtained by FES.
+"""
 import mdtraj
 import numpy as np
 from itertools import combinations

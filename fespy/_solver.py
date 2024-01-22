@@ -1,3 +1,8 @@
+"""
+_solver.py
+
+Submodule that computes the 1D Free Energy Surface of the protein given to FES object.
+"""
 import numpy as np
 from scipy.constants import gas_constant
 from scipy.optimize import least_squares

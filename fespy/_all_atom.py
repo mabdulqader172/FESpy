@@ -1,3 +1,8 @@
+"""
+_all_atom.py
+
+Submodule that computes all heavy atom level information of the protein structure obtained by FES.
+"""
 import mdtraj
 import numpy as np
 from scipy.constants import epsilon_0, e, N_A

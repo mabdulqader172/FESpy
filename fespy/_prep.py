@@ -107,12 +107,13 @@ def compute_dielectric(temp) -> float:
     that the mode
     Parameters
     ----------
-    temp
+    temp: float
+        Temperature of the folding experiment in Kelvin.
 
     Returns
     -------
     rtype: float
-        Return the relative permittivity
+        Returns the relative permittivity
     """
     fit = np.array([
         1.14427144e-08, -1.59366817e-05,  8.98556111e-03,
