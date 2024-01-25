@@ -26,16 +26,32 @@ class FES:
     OOP interface for calculating the 1D projection of an energy surface
     for single domain proteins. The model assumes kinetics can be
     determined via diffusion on the energy surface.
-
-    Attributes
-    ----------
     """
-
     def __init__(self, kfexp, kuexp, pdb, pH=7.4, temp=298, k0=1e7, lnat=101):
         """
         Parses structure and sequence data from the Protein Data Bank
         file passed along with the experimental folding kinetics
         obtained from research.
+
+        Parameters
+        ----------
+        kfexp: float
+            Folding rate of the protein domain.
+        kuexp: float
+            Unfolding rate of the protein domain.
+        pdb: str
+            File path of protein databank file.
+        pH: float
+            pH of the protein.
+        temp: float
+            Temperature of the folding experiment in Kelvin. Default set to
+            298K.
+        k0: float
+            Pre-exponential for determining (un)folding rates via Kramer's
+            approximation. Default set to 1e7 per sec.
+        lnat: int
+            The size of the mesh for the nativeness reaction coordinate. Default
+            set to 101 points.
         """
         self.traj: mdtraj.Trajectory = prep_structure(pdb_file=pdb, pH=pH)
         self.n_residues = self.traj.n_residues
@@ -72,7 +88,7 @@ class FES:
          self.lro) = self._get_topology()
 
     def _get_topology(self) -> typing.Tuple[
-            np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+            float, float, float, float]:
         """
         Returns the topology parameters derived by previous research from following
         groups: Baker Lab (CO, ACO), Gromiha Lab (LRO), Zhou Lab (TCD). Each follow
@@ -81,7 +97,7 @@ class FES:
 
         Returns
         -------
-        rtype: typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+        rtype: typing.Tuple[float, float, float, float]
             Contact order (CO), absolute contact order (ACO), total contact distance
             (TCD), and long range order (LRO) of the protein.
         """
