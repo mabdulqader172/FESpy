@@ -25,7 +25,7 @@ class CAlpha:
         # Distances (nm) and residue pairings
         d, self.residue_pair = mdtraj.compute_contacts(
             traj=traj, contacts=list(combinations(np.arange(traj.n_residues), 2)), scheme='ca')
-        self.distances = d[0]
+        self.r = d[0]
 
         # DSSP and dssp pairings by residue
         self.dssp = mdtraj.compute_dssp(traj=traj, simplified=True)[0]

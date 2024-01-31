@@ -6,7 +6,7 @@ Submodule that computes all heavy atom level information of the protein structur
 import mdtraj
 import numpy as np
 from scipy.constants import epsilon_0, e, N_A
-from ._prep import determine_charges, compute_dielectric
+from ._prep import *
 from itertools import combinations
 import typing
 
@@ -17,12 +17,7 @@ class AllAtom:
     """
     All atom object which determines full atom library for any
     given single domain protein.
-
-    Attributes
-    ----------
-
     """
-
     def __init__(self, traj, pH, temp) -> None:
         """
         Wrangle atom level information on the single domain protein.
@@ -39,6 +34,7 @@ class AllAtom:
         """
         # general position and topology data
         self.xyz = traj.xyz[0]
+        self.seq = ''.join(traj.topology.to_fasta())
         self.topology: mdtraj.Topology = traj.topology
 
         # van der Waal radii in nanometer
@@ -49,140 +45,36 @@ class AllAtom:
 
         # bonded data
         (self.bond,
-         self.bond_type) = self._bonds()
+         self.bond_key,
+         self.bond_type) = self._bonded()
 
-        # hydrogen bond data
-        (self.hbond,
-         self.hbond_type,
-         self.hbond_dist,
-         self.hbond_theta,
-         self.hbond_rmin,
-         self.hbond_seqdist) = self._hbonds(traj)
-
-        # van der Waal data
-        (self.vdw,
-         self.vdw_type,
-         self.vdw_dist,
-         self.vdw_rmin,
-         self.vdw_seqdist) = self._van_der_waal(traj)
+        # non-bonded (van der Waal) data
+        (self.r,
+         self.r_min,
+         self.r_cut,
+         self.seqdist,
+         self.non_bond,
+         self.non_bond_key,
+         self.non_bond_type) = self._non_bonded(traj)
 
         # electrostatic data
-        self.charge_dict = determine_charges(pH=pH)
-        self.epsilon_r = compute_dielectric(temp=temp)
-        (self.coulomb,
-         self.coulomb_type,
-         self.coulomb_potential,
-         self.coulomb_charge,
-         self.coulomb_dist,
-         self.coulomb_rmin,
-         self.coulomb_seqdist) = self._electrostatic(traj)
-
-        # key all pairings
-        self.non_bonded, self.non_bonded_key = self.determine_keys()
-
-    def determine_keys(self) -> typing.Tuple[np.ndarray, np.ndarray]:
-        """
-        Determine the key matrix for all atom pairings available in the protein.
-
-        Returns
-        -------
-        rtype: typing.Tuple[np.ndarray, np.ndarray]
-            Array of key typings for search algorithms.
-        """
-        pair_matrix = np.unique(
-            np.vstack((self.vdw, self.coulomb, self.hbond)),
-            axis=0
+        self.charge_dict = determine_charges(
+            pH=pH,
+            first_res=self.seq[0],
+            last_res=self.seq[-1],
         )
+        self.epsilon = compute_dielectric(temp=temp) * epsilon_0
+        self.lam_d = compute_debye_length(
+            ionic_strength=compute_ionic_strength(conc=0.05, pH=pH),
+            temp=temp,
+        )
+        (self.is_coulomb,
+         self.q1q2,
+         self.coulomb_potential) = self._electrostatic()
 
-        # make key matrix
-        key_matrix = list()
-        for i, j in pair_matrix:
-            _key = [False, False, False]
-
-            # determine the key combo
-            if np.any((self.hbond == (i, j)).all(axis=1)):
-                _key[1] = True
-            else:
-                _key[0] = True
-            if np.any((self.coulomb == (i, j)).all(axis=1)):
-                _key[2] = True
-
-            # store key
-            key_matrix.append(_key)
-
-        return pair_matrix, np.array(key_matrix)
-
-    def _bonds(self) -> typing.Tuple[np.ndarray, np.ndarray]:
-        """
-        Find all the non-hydrogen bonds in the protein and the
-        atom types involved in the pairings.
-
-        Returns
-        -------
-        rtype: typing.Tuple[np.ndarray, np.ndarray]
-            Return the atom bond index and atom bond types.
-        """
-        bond_data = np.array([
-            [a.index, b.index, a.name.upper(), b.name.upper()]
-            for a, b in self.topology.bonds
-        ])
-        # non_hydrogen_cond = (bond_data[:, -2] != 'H') & (bond_data[:, -1] != 'H')
-
-        return bond_data[:, :2].astype(int), bond_data[:, 2:].astype(str)
-
-    def _hbonds(self, traj) -> typing.Tuple[
-            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-            np.ndarray, np.ndarray]:
-        """
-        Find all the hydrogen bonds in the protein along with the
-        angle each bond is producing.
-
-        Parameters
-        ----------
-        traj: mdtraj.Trajectory
-            Trajectory object for determining the atoms involved in
-            hydrogen bonding.
-
-        Returns
-        -------
-        rtype: typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-            Returns the angles, distances, and pairings each
-            hydrogen bond is involved in.
-        """
-        # donor, hdrgn, acptr = mdtraj.baker_hubbard(traj).T
-        donor, hdrgn, acptr = mdtraj.wernet_nilsson(traj=traj)[0].T
-
-        # determine theta
-        a = self.xyz[donor] - self.xyz[hdrgn]
-        b = self.xyz[acptr] - self.xyz[hdrgn]
-        hbond_theta = np.arccos([
-            ai.dot(bi) / np.sqrt(ai.dot(ai)) / np.sqrt(bi.dot(bi))
-            for ai, bi in zip(a, b)
-        ])
-
-        # determine atomic distances between each hbond
-        hbond_dist = mdtraj.compute_distances(
-            traj, atom_pairs=np.vstack((donor, acptr)).T)[0]
-
-        # sort the donor and acceptor pairings by idx
-        hbond = np.sort(np.vstack((donor, acptr)).T, axis=1)
-
-        # get the hbond types
-        hbond_type = np.array([
-            (self.topology.atom(i).name.upper()[0],
-             self.topology.atom(j).name.upper()[0])
-            for i, j in hbond
-        ])
-        hbond_seqdist = np.array([
-            np.abs(self.topology.atom(i).residue.index - self.topology.atom(j).residue.index)
-            for i, j in hbond
-        ])
-
-        # get hbond sigma
-        hbond_rmin = np.array([self.rw[a] + self.rw[b] for a, b in hbond_type])
-
-        # return all hbond data
-        return hbond, hbond_type, hbond_dist, hbond_theta, hbond_rmin, hbond_seqdist
+        # hydrogen bond data
+        (self.is_hbond,
+         self.hbond_theta) = self._hbonds(traj)
 
     def _check_pairs(self, i, j) -> bool:
         """
@@ -210,56 +102,73 @@ class AllAtom:
             return False
 
         # Determine if bonded
-        if np.any((self.bond == (i, j)).all(axis=1)):
-            return False
-
-        # Determine if hydrogen bonded
-        if np.any((self.hbond == (i, j)).all(axis=1)):
+        if np.any(np.isin(self.bond, (i, j)).all(axis=1)):
             return False
 
         # if all conditions met return true
         return True
 
-    def _van_der_waal(self, traj) -> typing.Tuple[
-            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-            np.ndarray]:
+    def _bonded(self) -> list[np.ndarray]:
         """
-        Determine all the atom pairings, atom types of each pairing,
-        distance (in nanometer), and sigma (for lennard-jones
-        calculations) for all van der Waal pairs in the protein.
-
-        Parameters
-        ----------
-        traj: mdtraj.Trajectory
-            Trajectory object for determining the atoms involved in
-            van der Waal interactions.
+        Find all the non-hydrogen bonds in the protein and the
+        atom types involved in the pairings.
 
         Returns
         -------
-        rtype: typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-            Returns atom idx of each pair, atom types in pair, distance,
-            and sigma for each van der Waals interaction.
+        rtype: list[np.ndarray]
+            Return the atom bond index and atom bond types.
         """
-        # determine all the vdw pairings and atom types of each pairing
-        vdw_data = np.array([
-            (i, j,
-             self.topology.atom(i).name.upper()[0], self.topology.atom(j).name.upper()[0],
+        bond_data = np.array([
+            [a.index,
+             b.index,
+             f'{a.name.upper()}-{a.residue.name.upper()}-{a.residue.index}',
+             f'{b.name.upper()}-{b.residue.name.upper()}-{b.residue.index}',
+             ''.join([a.name.upper()[0], b.name.upper()[0]])
+             ] for a, b in self.topology.bonds
+        ])
+        return [bond_data[:, :2].astype(int), bond_data[:, 2:], bond_data[:, -1]]
+
+    def _non_bonded(self, traj) -> list[np.ndarray]:
+        """
+        Find all the non-hydrogen bonds in the protein and the
+        atom types involved in the pairings.
+
+        Returns
+        -------
+        rtype: list[np.ndarray]
+            Return the atom bond index and atom bond types.
+        """
+        # extract all the non-bonded data
+        non_bond_data = np.array([
+            (i,
+             j,
+             '{}-{}-{}'.format(
+                 self.topology.atom(i).name.upper(),
+                 self.topology.atom(i).residue.name.upper(),
+                 self.topology.atom(i).residue.index
+             ),
+             '{}-{}-{}'.format(
+                 self.topology.atom(j).name.upper(),
+                 self.topology.atom(j).residue.name.upper(),
+                 self.topology.atom(j).residue.index
+             ),
+             ''.join([self.topology.atom(j).name.upper()[0], self.topology.atom(j).name.upper()[0]]),
              np.abs(self.topology.atom(i).residue.index - self.topology.atom(j).residue.index))
             for i, j in combinations(np.arange(self.topology.n_atoms), 2) if self._check_pairs(i, j)
         ])
-        vdw = vdw_data[:, :2].astype(int)
-        vdw_type = vdw_data[:, 2:-1]
-        vdw_seqdist = vdw_data[:, -1].astype(int)
 
-        # get distance parameters
-        vdw_dist = mdtraj.compute_distances(traj, atom_pairs=vdw_data[:, :2])[0]
-        vdw_rmin = np.array([self.rw[a] + self.rw[b] for a, b in vdw_type])
+        # split into 1D array attributes
+        pair_idx = non_bond_data[:, :2].astype(int)
+        pair_key = non_bond_data[:, 2:-2]
+        pair_type = non_bond_data[:, -2]
+        seqdist = non_bond_data[:, -1].astype(int)
+        r_min = np.array([self.rw[a[0]] + self.rw[b[0]] for a, b in pair_type])
+        r_cut = 2.5 * r_min
+        r = mdtraj.compute_distances(traj, atom_pairs=pair_idx)[0]
 
-        return vdw, vdw_type, vdw_dist, vdw_rmin, vdw_seqdist
+        return [r, r_min, r_cut, seqdist, pair_idx, pair_key, pair_type]
 
-    def _electrostatic(self, traj) -> typing.Tuple[
-            np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-            np.ndarray, np.ndarray, np.ndarray]:
+    def _electrostatic(self, shift=True) -> list[np.ndarray]:
         """
         Determine the electrostatics of the protein. The atom pairing,
         atom pairing type, point charge, and distance between each pairing
@@ -267,61 +176,110 @@ class AllAtom:
 
         Parameters
         ----------
-        traj: mdtraj.Trajectory
-            Trajectory object for determining the atoms involved in
-            van der Waal interactions.
+        shift: bool
+            Apply shift function to taper electrostatic effects to 0 outside
+            of Debye length. Default is True.
 
         Returns
         -------
-        rtype: typing.Tuple[
-                np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray np.ndarray]
-            Returns the coulomb pairings, atom typings, potential (kJ/mol), q1q1, and r (nm).
+        rtype: list[np.ndarray]
+            Returns which pairings are involved in electrostatics, the charge, and potential
+            in (kJ/mol).
         """
         # determine the point charge of each atom type
         charged_resid = ['ASP', 'GLU', 'ARG', 'LYS', 'HIS']
 
         # selection algebra for finding the subset of atoms in the protein
-        atom_idx = self.topology.select(
+        charge_atom_idx = self.topology.select(
             f'((resname {" ".join(charged_resid)}) and (name {" ".join(list(self.charge_dict.keys())[:-2])})) \
             or (name N and resid 0) or (name OXT and resid {self.topology.n_residues - 1})'
         )
-        f = lambda i, j: (self.topology.atom(i).residue.index != self.topology.atom(j).residue.index) \
-            and not (np.any((self.bond == (i, j)).all(axis=1)))
-
-        # get all the atom pairings pairing types for charged atoms
-        coulomb_data = np.array([
-            (i, j,
-             self.topology.atom(i).name.upper()[0], self.topology.atom(j).name.upper()[0],
-             np.abs(self.topology.atom(i).residue.index - self.topology.atom(j).residue.index))
-            for i, j in combinations(atom_idx, 2) if f(i, j)
+        charge_pairs = np.array([
+            (i, j) for i, j in combinations(charge_atom_idx, 2)
+            if self._check_pairs(i, j)
+        ])
+        is_coulomb = np.array([
+            np.any(np.isin(charge_pairs, _).all(axis=1))
+            for _ in self.non_bond
         ])
 
-        # get pairing and distance parameters
-        coulomb_dist = mdtraj.compute_distances(traj, atom_pairs=coulomb_data[:, :2])[0]
-        coulomb = coulomb_data[:, :2].astype(int)
-        coulomb_type = coulomb_data[:, 2:-1]
-        coulomb_seqdist = coulomb_data[:, -1].astype(int)
+        # get index of charged atom pairings
+        q1q2 = np.zeros(self.r.shape)
+        _ = np.arange(0, is_coulomb.shape[0])
+        coulomb_idx = np.array([
+            _[np.isin(self.non_bond, arr).all(axis=1)]
+            for arr in charge_pairs
+        ]).reshape(-1).astype(int)
 
-        # r_min
-        coulomb_rmin = np.array([(self.rw[a] + self.rw[b]) for a, b in coulomb_type])
-
-        # product charges
-        coulomb_charge = np.array([
+        # add charge to the charged pairings
+        q1q2[coulomb_idx] = np.array([
             (self.charge_dict[self.topology.atom(i).name] * e) *
             (self.charge_dict[self.topology.atom(j).name] * e)
-            for i, j in coulomb
+            for i, j in charge_pairs
         ])
 
-        # calculate the molar coulomb constant in terms of (J * m) / (C^2 * mol)
-        ke = N_A / (4 * np.pi * epsilon_0 * self.epsilon_r)
+        # apply shift function
+        if shift:
+            shift_c = (1 - ((self.r / self.lam_d) ** 2)) ** 2
+            shift_c[self.r > self.lam_d] = 0
+            is_coulomb[self.r > self.lam_d] = False
+        else:
+            shift_c = np.ones(self.r.shape)
 
-        # coulomb potential calculation for each atom pairing.
-        coulomb_potential = np.array([  # (J * m * C^2) / (C^2 * mol * m) --> (J / mol)
-            ke * (q1q2 / d) for d, q1q2 in zip(coulomb_dist * 1e-9, coulomb_charge)
-        ]) * 1e-3  # (J / mol) --> (kJ / mol)
+        # calculate the molar coulomb constant in terms of (kJ * m) / (C^2 * mol)
+        ke = (1e-3 * N_A) / (4 * np.pi * self.epsilon)
 
-        return (
-            coulomb, coulomb_type, coulomb_potential,
-            coulomb_charge, coulomb_dist, coulomb_rmin,
-            coulomb_seqdist
-        )
+        # compute electrostatic potential and apply shift function
+        potential = ke * (q1q2 / (self.r * 1e-9)) * np.exp(-self.r / self.lam_d)
+        coulomb_potential = shift_c * potential
+
+        # return electrostatic data
+        return [is_coulomb, q1q2, coulomb_potential]
+
+    def _hbonds(self, traj) -> list[np.ndarray]:
+        """
+        Find all the hydrogen bonds in the protein along with the
+        angle each bond is producing.
+
+        Parameters
+        ----------
+        traj: mdtraj.Trajectory
+            Trajectory object for determining the atoms involved in
+            hydrogen bonding.
+
+        Returns
+        -------
+        rtype: list[np.ndarray]
+            Returns the angles, distances, and pairings each
+            hydrogen bond is involved in.
+        """
+        donor, hdrgn, acptr = np.array([
+            (i, j, k) for i, j, k in zip(*mdtraj.wernet_nilsson(traj=traj)[0].T)
+            if self._check_pairs(i, k) and ~np.any(
+                np.isin(self.non_bond[self.is_coulomb], (i, k)).all(axis=1)
+            )
+        ]).T
+        hbond_pairs = np.array([donor, acptr]).T
+        is_hbond = np.array([
+            np.any(np.isin(hbond_pairs, _).all(axis=1))
+            for _ in self.non_bond
+        ])
+
+        # get index of atom_pairings
+        _ = np.arange(is_hbond.shape[0])
+        theta_idx = np.array([
+            _[np.isin(self.non_bond, arr).all(axis=1)]
+            for arr in hbond_pairs
+        ]).reshape(-1)
+
+        # determine theta, -1 means non-hbond pairing
+        theta = -1 * np.ones(self.r.shape)
+        a = self.xyz[donor] - self.xyz[hdrgn]
+        b = self.xyz[acptr] - self.xyz[hdrgn]
+        theta[theta_idx] = np.arccos([
+            ai.dot(bi) / np.sqrt(ai.dot(ai)) / np.sqrt(bi.dot(bi)) * (180 / np.pi)
+            for ai, bi in zip(a, b)
+        ])
+
+        # return all hbond data
+        return [is_hbond, theta]

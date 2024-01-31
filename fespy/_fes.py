@@ -58,7 +58,7 @@ class FES:
         self.n_atoms = self.traj.n_atoms
         self.pH = pH
         self.temp = temp
-        self.id = pdb.replace("/", "_").split("_")[-2]
+        self.id = ''.join((str(pdb).split("/")[-1]).split(".")[:-1])
 
         # General Kinetics
         self.kf = kfexp
@@ -87,8 +87,7 @@ class FES:
          self.tcd,
          self.lro) = self._get_topology()
 
-    def _get_topology(self) -> typing.Tuple[
-            float, float, float, float]:
+    def _get_topology(self) -> typing.Tuple[float, float, float, float]:
         """
         Returns the topology parameters derived by previous research from following
         groups: Baker Lab (CO, ACO), Gromiha Lab (LRO), Zhou Lab (TCD). Each follow
@@ -102,17 +101,15 @@ class FES:
             (TCD), and long range order (LRO) of the protein.
         """
         # get the non-bonded distances and conditions
-        distances = np.hstack((self.atom.vdw_dist, self.atom.hbond_dist))
-        seqdist = np.hstack((self.atom.vdw_seqdist, self.atom.hbond_seqdist))
-        cond = (distances < 0.6) & (seqdist >= 2)
+        cond = (self.atom.r < 0.6) & (self.atom.seqdist > 2)
 
         # compute CO, ACO, and TCD
-        co = seqdist[cond].sum() / (self.n_residues * seqdist[cond].size)
+        co = self.atom.seqdist[cond].sum() / (self.n_residues * self.atom.seqdist[cond].size)
         aco = self.n_residues * co
-        tcd = seqdist[cond].sum() / (self.n_residues ** 2)
+        tcd = self.atom.seqdist[cond].sum() / (self.n_residues ** 2)
 
         # condition for LRO
-        cond = (self.c_alpha.distances < 0.8) & (self.c_alpha.seqdist >= 12)
+        cond = (self.c_alpha.r < 0.8) & (self.c_alpha.seqdist >= 12)
         lro = self.c_alpha.seqdist[cond].size / self.n_residues
 
         return co, aco, tcd, lro
