@@ -59,6 +59,7 @@ class FES:
         self.pH = pH
         self.temp = temp
         self.id = ''.join((str(pdb).split("/")[-1]).split(".")[:-1])
+        self.dASA_p, self.dASA_ap = self._asa()
 
         # General Kinetics
         self.kf = kfexp
@@ -113,3 +114,55 @@ class FES:
         lro = self.c_alpha.seqdist[cond].size / self.n_residues
 
         return co, aco, tcd, lro
+
+    def _asa(self) -> typing.Tuple[float, float]:
+        """
+        Calculate the change in solvent accessible surface area in angstrom
+        square.
+
+        Returns
+        -------
+        rtype: typing.Tuple[float, float]
+            Return solvent accessible surface area for polar and apolar
+            components, respectively.
+        """
+        max_ap_lib = {
+            'ALA': 86.7, 'GLN': 59.7, 'LEU': 154.1, 'SER': 40.0,
+            'ARG': 96.9, 'GLU': 64.0, 'LYS': 125.2, 'THR': 89.7,
+            'ASN': 37.2, 'GLY': 42.0, 'MET': 121.4, 'TRP': 197.9,
+            'ASP': 36.6, 'HIS': 108.7, 'PHE': 191.2, 'TYR': 158.8,
+            'CYS': 34.8, 'ILE': 150.1, 'PRO': 130.0, 'VAL': 133.6
+        }
+        max_pl_lib = {
+            'ALA': 62.3, 'GLN': 165.3, 'LEU': 46.9, 'SER': 125.0,
+            'ARG': 177.1, 'GLU': 160.0, 'LYS': 112.8, 'THR': 94.3,
+            'ASN': 164.8, 'GLY': 62.0, 'MET': 102.6, 'TRP': 87.1,
+            'ASP': 156.4, 'HIS': 115.3, 'PHE': 48.8, 'TYR': 104.2,
+            'CYS': 143.2, 'ILE': 46.9, 'PRO': 49.0, 'VAL': 51.4
+        }
+
+        # get non_hydrogen structure
+        non_hydrogen_structure = self.traj.atom_slice(
+            self.traj.topology.select('(element != H) and (element != D)')
+        )
+        max_ap, max_pl = np.array([
+            (max_ap_lib[res.name], max_pl_lib[res.name])
+            for res in non_hydrogen_structure.topology.residues
+        ]).sum(axis=0)
+
+        # get the asa, with the index
+        asa, idx = mdtraj.shrake_rupley(
+            non_hydrogen_structure, mode='atom', n_sphere_points=960, get_mapping=True
+        )
+
+        # identify the apolar atoms
+        is_apolar = np.array([
+            non_hydrogen_structure.topology.atom(i).name.upper()[0] == 'C'
+            for i in idx
+        ]).astype(bool)
+
+        # apply boolean to get p and ap areas
+        asa_ap = (asa[0, is_apolar].sum()) * 100
+        asa_pl = (asa[0].sum() - asa_ap) * 100
+
+        return max(max_pl - asa_pl, 0), max(max_ap - asa_ap, 0)

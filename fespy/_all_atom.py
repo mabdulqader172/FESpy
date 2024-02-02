@@ -8,7 +8,6 @@ import numpy as np
 from scipy.constants import epsilon_0, e, N_A
 from ._prep import *
 from itertools import combinations
-import typing
 
 __all__ = ['AllAtom']
 
