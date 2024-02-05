@@ -104,6 +104,17 @@ class AllAtom:
         if np.any(np.isin(self.bond, (i, j)).all(axis=1)):
             return False
 
+        # determine if pairing sufficiently far away (three bond lengths minimum)
+        (a, b) = (i, j) if i < j else (j, i)
+        atm_cond = (
+            self.topology.atom(a).name, self.topology.atom(b).name
+                   ) in (('O', 'N'), ('C', 'CA'))
+        seq_cond = (
+            self.topology.atom(a).residue.index - self.topology.atom(b).residue.index
+                   ) == -1
+        if atm_cond * seq_cond:
+            return False
+
         # if all conditions met return true
         return True
 
