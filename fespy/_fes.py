@@ -59,7 +59,14 @@ class FES:
         self.pH = pH
         self.temp = temp
         self.id = ''.join((str(pdb).split("/")[-1]).split(".")[:-1])
-        self.dASA_p, self.dASA_ap = self._asa()
+
+        # solvation data
+        (self.dASA_p,
+         self.dASA_ap,
+         self.RSA_p,
+         self.RSA_ap,
+         self.dASA,
+         self.RSA) = self._asa()
 
         # General Kinetics
         self.kf = kfexp
@@ -115,14 +122,14 @@ class FES:
 
         return co, aco, tcd, lro
 
-    def _asa(self) -> typing.Tuple[float, float]:
+    def _asa(self) -> typing.Tuple[float, float, float, float, float, float]:
         """
         Calculate the change in solvent accessible surface area in angstrom
         square.
 
         Returns
         -------
-        rtype: typing.Tuple[float, float]
+        rtype: typing.Tuple[float, float, float, float, float, float]
             Return solvent accessible surface area for polar and apolar
             components, respectively.
         """
@@ -163,6 +170,10 @@ class FES:
 
         # apply boolean to get p and ap areas
         asa_ap = (asa[0, is_apolar].sum()) * 100
-        asa_pl = (asa[0].sum() - asa_ap) * 100
+        asa_pl = (asa[0].sum() * 100) - asa_ap
+        dASA_pl, dASA_ap = max(max_pl - asa_pl, 0), max(max_ap - asa_ap, 0)
+        RSA_pl, RSA_ap = (asa_pl / max_pl), (asa_ap / max_ap)
+        dASA = max((max_pl + max_ap) - (asa_pl + asa_ap), 0)
+        RSA = (asa_pl + asa_ap) / (max_pl + max_ap)
 
-        return max(max_pl - asa_pl, 0), max(max_ap - asa_ap, 0)
+        return dASA_pl, dASA_ap, RSA_pl, RSA_ap, dASA, RSA

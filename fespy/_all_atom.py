@@ -56,6 +56,10 @@ class AllAtom:
          self.non_bond_key,
          self.non_bond_type) = self._non_bonded(traj)
 
+        # hydrogen bond data
+        (self.is_hbond,
+         self.hbond_theta) = self._hbonds(traj)
+
         # electrostatic data
         self.charge_dict = determine_charges(
             pH=pH,
@@ -70,10 +74,6 @@ class AllAtom:
         (self.is_coulomb,
          self.q1q2,
          self.coulomb_potential) = self._electrostatic()
-
-        # hydrogen bond data
-        (self.is_hbond,
-         self.hbond_theta) = self._hbonds(traj)
 
     def _check_pairs(self, i, j) -> bool:
         """
@@ -122,7 +122,7 @@ class AllAtom:
              b.index,
              f'{a.name.upper()}-{a.residue.name.upper()}-{a.residue.index}',
              f'{b.name.upper()}-{b.residue.name.upper()}-{b.residue.index}',
-             ''.join([a.name.upper()[0], b.name.upper()[0]])
+             ''.join(np.sort([a.name.upper()[0], b.name.upper()[0]]))
              ] for a, b in self.topology.bonds
         ])
         return [bond_data[:, :2].astype(int), bond_data[:, 2:], bond_data[:, -1]]
@@ -151,7 +151,7 @@ class AllAtom:
                  self.topology.atom(j).residue.name.upper(),
                  self.topology.atom(j).residue.index
              ),
-             ''.join([self.topology.atom(j).name.upper()[0], self.topology.atom(j).name.upper()[0]]),
+             ''.join(np.sort([self.topology.atom(i).name.upper()[0], self.topology.atom(j).name.upper()[0]])),
              np.abs(self.topology.atom(i).residue.index - self.topology.atom(j).residue.index))
             for i, j in combinations(np.arange(self.topology.n_atoms), 2) if self._check_pairs(i, j)
         ])
@@ -202,6 +202,9 @@ class AllAtom:
             for _ in self.non_bond
         ])
 
+        # h-bonds must not be an electrostatic
+        is_coulomb[self.is_hbond] = False
+
         # get index of charged atom pairings
         q1q2 = np.zeros(self.r.shape)
         _ = np.arange(0, is_coulomb.shape[0])
@@ -221,9 +224,11 @@ class AllAtom:
         if shift:
             shift_c = (1 - ((self.r / self.lam_d) ** 2)) ** 2
             shift_c[self.r > self.lam_d] = 0
+            shift_c[self.is_hbond] = 0
             is_coulomb[self.r > self.lam_d] = False
         else:
             shift_c = np.ones(self.r.shape)
+            shift_c[self.is_hbond] = 0
 
         # calculate the molar coulomb constant in terms of (kJ * m) / (C^2 * mol)
         ke = (1e-3 * N_A) / (4 * np.pi * self.epsilon)
@@ -253,10 +258,9 @@ class AllAtom:
             hydrogen bond is involved in.
         """
         donor, hdrgn, acptr = np.array([
-            (i, j, k) for i, j, k in zip(*mdtraj.wernet_nilsson(traj=traj)[0].T)
-            if self._check_pairs(i, k) and ~np.any(
-                np.isin(self.non_bond[self.is_coulomb], (i, k)).all(axis=1)
-            )
+            (i, j, k) for i, j, k in zip(*mdtraj.baker_hubbard(
+                traj=traj, distance_cutoff=0.25, angle_cutoff=90
+            ).T) if self._check_pairs(i, k)
         ]).T
         hbond_pairs = np.array([donor, acptr]).T
         is_hbond = np.array([
@@ -276,9 +280,9 @@ class AllAtom:
         a = self.xyz[donor] - self.xyz[hdrgn]
         b = self.xyz[acptr] - self.xyz[hdrgn]
         theta[theta_idx] = np.arccos([
-            ai.dot(bi) / np.sqrt(ai.dot(ai)) / np.sqrt(bi.dot(bi)) * (180 / np.pi)
+            ai.dot(bi) / np.sqrt(ai.dot(ai)) / np.sqrt(bi.dot(bi))
             for ai, bi in zip(a, b)
-        ])
+        ]) * (180 / np.pi)
 
         # return all hbond data
         return [is_hbond, theta]
